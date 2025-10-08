@@ -15,7 +15,7 @@ const SimilarityChecker = () => {
   const [feedbackGiven, setFeedbackGiven] = useState({});
   
   // API Configuration - UPDATE THESE URLs
-  const API_BASE_URL = 'https://8000-01k6w02czv93bhave2xgrvw6gv.cloudspaces.litng.ai'; // Change to your API URL
+  const API_BASE_URL = 'https://8000-01k6w02czv93bhave2xgrvw6gv.cloudspaces.litng.ai';
   
   const [settings, setSettings] = useState({
     committeeCode: '',
@@ -242,11 +242,11 @@ const SimilarityChecker = () => {
 
         {/* Search Section */}
         <div className="mb-12">
-          <div className="text-center mb-8 space-y-3">
-            <h2 className="text-4xl font-bold bg-gradient-to-l from-slate-200 via-slate-100 to-slate-300 bg-clip-text text-transparent">
-              {searchMode === 'text' ? 'جستجوی پیشنهادات مشابه' : 'جستجو با کد پیشنهاد'}
+          <div className="text-center mb-8 space-y-4">
+            <h2 className="text-4xl font-bold bg-gradient-to-l from-slate-200 via-slate-100 to-slate-300 bg-clip-text text-transparent pb-1 leading-tight">
+              {searchMode === 'text' ? 'جستجو با عنوان و شرح پیشنهاد' : 'جستجو با کد پیشنهاد'}
             </h2>
-            <p className="text-slate-400 text-lg">
+            <p className="text-slate-400 text-lg leading-relaxed">
               {searchMode === 'text' 
                 ? 'عنوان و شرح پیشنهاد خود را وارد کنید'
                 : 'کد پیشنهاد را وارد کنید'}
