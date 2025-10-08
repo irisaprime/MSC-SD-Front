@@ -1,65 +1,32 @@
 import React, { useState } from 'react';
-import { Search, Settings, Loader2, TrendingUp, Clock, Sparkles, Filter, Hash, ThumbsUp, ThumbsDown, MessageSquare, Send, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Settings, Loader2, TrendingUp, Sparkles, Filter, Hash, ThumbsUp, ThumbsDown, MessageSquare, Send, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 
 const SimilarityChecker = () => {
   const [searchMode, setSearchMode] = useState('text'); // 'text' or 'id'
-  const [query, setQuery] = useState('');
-  const [suggestionId, setSuggestionId] = useState('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [suggestionCode, setSuggestionCode] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
   const [expandedResults, setExpandedResults] = useState({});
-  const [comments, setComments] = useState({});
   const [commentInputs, setCommentInputs] = useState({});
+  const [feedbackGiven, setFeedbackGiven] = useState({});
+  
+  // API Configuration - UPDATE THESE URLs
+  const API_BASE_URL = 'https://8000-01k6w02czv93bhave2xgrvw6gv.cloudspaces.litng.ai'; // Change to your API URL
   
   const [settings, setSettings] = useState({
-    maxResults: 5,
-    threshold: 0.7,
-    semanticWeight: 0.6
+    committeeCode: '',
+    status: '',
+    isDuplicated: null,
+    startDate: '',
+    endDate: '',
+    threshold: 0.0,
+    topK: 10,
+    alpha: 0.5
   });
-
-  // Field visibility settings
-  const [visibleFields, setVisibleFields] = useState({
-    id: true,
-    code: true,
-    employee_number: true,
-    jalali_date: true,
-    gregorian_date: false,
-    hour: false,
-    minute: false,
-    second: false,
-    title: true,
-    description: true,
-    status: true,
-    type_code: false,
-    type: true,
-    feasibility_code: false,
-    feasibility: true,
-    committee_code: false,
-    supervisor_employee_number: false,
-    supervisor_name: true
-  });
-
-  const fieldLabels = {
-    id: 'شناسه پیشنهاد',
-    code: 'کد پیشنهاد',
-    employee_number: 'شماره پرسنلی ثبت‌کننده',
-    jalali_date: 'تاریخ ثبت (شمسی)',
-    gregorian_date: 'تاریخ ثبت (میلادی)',
-    hour: 'ساعت',
-    minute: 'دقیقه',
-    second: 'ثانیه',
-    title: 'عنوان پیشنهاد',
-    description: 'شرح پیشنهاد',
-    status: 'وضعیت',
-    type_code: 'کد نوع پیشنهاد',
-    type: 'نوع پیشنهاد',
-    feasibility_code: 'کد امکان اجرا',
-    feasibility: 'امکان اجرا',
-    committee_code: 'کد کمیته',
-    supervisor_employee_number: 'شماره پرسنلی مسئول',
-    supervisor_name: 'نام مسئول'
-  };
 
   // Convert to Persian numbers
   const toPersianNum = (num) => {
@@ -67,112 +34,151 @@ const SimilarityChecker = () => {
     return String(num).replace(/\d/g, (digit) => persianDigits[parseInt(digit)]);
   };
 
-  // Mock search function - replace with actual API call
+  // Search function
   const handleSearch = async () => {
-    const searchValue = searchMode === 'id' ? suggestionId : query;
-    if (!searchValue.trim()) return;
+    if (searchMode === 'text' && (!title.trim() || !description.trim())) {
+      setError('لطفاً عنوان و شرح پیشنهاد را وارد کنید');
+      return;
+    }
+    if (searchMode === 'id' && !suggestionCode.trim()) {
+      setError('لطفاً کد پیشنهاد را وارد کنید');
+      return;
+    }
     
     setIsSearching(true);
+    setError(null);
+    setResults(null);
     
-    // Simulate API call - REPLACE WITH YOUR ACTUAL API
-    setTimeout(() => {
-      const mockResults = [
-        {
-          id: 12345,
-          code: 'SUG-2024-001',
-          employee_number: '98765',
-          jalali_date: '1403/06/15',
-          gregorian_date: '2024-09-06',
-          hour: 14,
-          minute: 30,
-          second: 45,
-          title: 'بهبود سیستم تهویه مطبوع',
-          description: 'پیشنهاد بهبود سیستم تهویه مطبوع سالن تولید برای افزایش راندمان و کاهش مصرف انرژی',
-          status: 'در حال بررسی',
-          type_code: 'T01',
-          type: 'بهبود فرآیند',
-          feasibility_code: 'F01',
-          feasibility: 'قابل اجرا',
-          committee_code: 'C05',
-          supervisor_employee_number: '11223',
-          supervisor_name: 'محمد رضایی',
-          similarity: 0.92
-        },
-        {
-          id: 12340,
-          code: 'SUG-2024-002',
-          title: 'ارتقای کیفیت هوا',
-          description: 'ارتقای کیفیت هوای سالن با نصب دستگاه‌های تصفیه هوا',
-          jalali_date: '1403/05/22',
-          status: 'تایید شده',
-          type: 'بهبود محیط کار',
-          feasibility: 'قابل اجرا',
-          supervisor_name: 'سارا احمدی',
-          similarity: 0.87
-        }
-      ].filter(r => r.similarity >= settings.threshold).slice(0, settings.maxResults);
+    try {
+      const endpoint = searchMode === 'text' 
+        ? `${API_BASE_URL}/v1/detector/similarity-detection-without-id`
+        : `${API_BASE_URL}/v1/detector/similarity-detection-by-id`;
       
-      setResults(mockResults);
+      const requestBody = searchMode === 'text' 
+        ? {
+            title: title.trim(),
+            description: description.trim(),
+            'committee_code': settings.committeeCode || undefined,
+            'status': settings.status || undefined,
+            'is-duplicated': settings.isDuplicated,
+            'start-date': settings.startDate || undefined,
+            'end-date': settings.endDate || undefined,
+            'threshold': settings.threshold,
+            'top-k': settings.topK,
+            'alpha': settings.alpha
+          }
+        : {
+            code: suggestionCode.trim(),
+            'committee_code': settings.committeeCode || undefined,
+            'status': settings.status || undefined,
+            'is-duplicated': settings.isDuplicated,
+            'start-date': settings.startDate || undefined,
+            'end-date': settings.endDate || undefined,
+            'threshold': settings.threshold,
+            'top-k': settings.topK,
+            'alpha': settings.alpha
+          };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`خطا در دریافت اطلاعات: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setResults(data);
+      
+    } catch (err) {
+      setError(err.message || 'خطا در برقراری ارتباط با سرور');
+      console.error('Search error:', err);
+    } finally {
       setIsSearching(false);
-    }, 1500);
+    }
   };
 
   // Feedback API call
-  const handleFeedback = async (resultId, feedbackType) => {
-    // REPLACE WITH YOUR ACTUAL API ENDPOINT
-    console.log('Sending feedback:', { resultId, feedbackType });
-    
-    // Mock API call
-    /*
-    await fetch('YOUR_FEEDBACK_API_ENDPOINT', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resultId, feedbackType })
-    });
-    */
+  const handleFeedback = async (operationId, index, feedbackType) => {
+    try {
+      const statusValue = feedbackType === 'positive' ? 1 : feedbackType === 'negative' ? -1 : 0;
+      
+      const response = await fetch(`${API_BASE_URL}/v1/detector/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          'operation-id': operationId,
+          'index': index,
+          'status': statusValue
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.type === 'successful') {
+        setFeedbackGiven({
+          ...feedbackGiven,
+          [`${operationId}-${index}`]: feedbackType
+        });
+      }
+      
+    } catch (err) {
+      console.error('Feedback error:', err);
+    }
   };
 
   // Comment API call
-  const handleCommentSubmit = async (resultId) => {
-    const comment = commentInputs[resultId];
+  const handleCommentSubmit = async (operationId, index) => {
+    const comment = commentInputs[`${operationId}-${index}`];
     if (!comment?.trim()) return;
     
-    // REPLACE WITH YOUR ACTUAL API ENDPOINT
-    console.log('Sending comment:', { resultId, comment });
-    
-    // Mock API call
-    /*
-    await fetch('YOUR_COMMENT_API_ENDPOINT', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resultId, comment })
-    });
-    */
-    
-    setComments({...comments, [resultId]: comment});
-    setCommentInputs({...commentInputs, [resultId]: ''});
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/detector/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          'operation-id': operationId,
+          'index': index,
+          'status': 0,
+          'comment': comment
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.type === 'successful') {
+        setCommentInputs({...commentInputs, [`${operationId}-${index}`]: ''});
+      }
+      
+    } catch (err) {
+      console.error('Comment error:', err);
+    }
   };
 
   const getSimilarityColor = (score) => {
-    if (score >= 0.9) return 'from-emerald-500/20 to-emerald-600/20 border-emerald-500/30';
-    if (score >= 0.8) return 'from-blue-500/20 to-blue-600/20 border-blue-500/30';
-    if (score >= 0.7) return 'from-amber-500/20 to-amber-600/20 border-amber-500/30';
+    if (score >= 90) return 'from-emerald-500/20 to-emerald-600/20 border-emerald-500/30';
+    if (score >= 80) return 'from-blue-500/20 to-blue-600/20 border-blue-500/30';
+    if (score >= 70) return 'from-amber-500/20 to-amber-600/20 border-amber-500/30';
     return 'from-slate-500/20 to-slate-600/20 border-slate-500/30';
   };
 
   const getSimilarityTextColor = (score) => {
-    if (score >= 0.9) return 'text-emerald-400';
-    if (score >= 0.8) return 'text-blue-400';
-    if (score >= 0.7) return 'text-amber-400';
+    if (score >= 90) return 'text-emerald-400';
+    if (score >= 80) return 'text-blue-400';
+    if (score >= 70) return 'text-amber-400';
     return 'text-slate-400';
   };
 
-  const toggleFieldVisibility = (field) => {
-    setVisibleFields({...visibleFields, [field]: !visibleFields[field]});
-  };
-
   return (
-    <div dir="rtl" className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white font-vazir overflow-hidden">
+    <div dir="rtl" className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white font-sans overflow-hidden">
       {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 -right-48 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse"></div>
@@ -229,7 +235,7 @@ const SimilarityChecker = () => {
               }`}
             >
               <Hash className="w-4 h-4" />
-              جستجو با شناسه
+              جستجو با کد
             </button>
           </div>
         </div>
@@ -238,12 +244,12 @@ const SimilarityChecker = () => {
         <div className="mb-12">
           <div className="text-center mb-8 space-y-3">
             <h2 className="text-4xl font-bold bg-gradient-to-l from-slate-200 via-slate-100 to-slate-300 bg-clip-text text-transparent">
-              {searchMode === 'text' ? 'جستجوی پیشنهادات مشابه' : 'جستجو با شناسه پیشنهاد'}
+              {searchMode === 'text' ? 'جستجوی پیشنهادات مشابه' : 'جستجو با کد پیشنهاد'}
             </h2>
             <p className="text-slate-400 text-lg">
               {searchMode === 'text' 
-                ? 'پیشنهاد خود را وارد کنید تا موارد مشابه قبلی را بررسی کنیم'
-                : 'شناسه پیشنهاد را وارد کنید (برای تست سریع)'}
+                ? 'عنوان و شرح پیشنهاد خود را وارد کنید'
+                : 'کد پیشنهاد را وارد کنید'}
             </p>
           </div>
 
@@ -253,25 +259,34 @@ const SimilarityChecker = () => {
               
               <div className="relative bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5">
                 {searchMode === 'text' ? (
-                  <textarea
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && e.ctrlKey) handleSearch();
-                    }}
-                    placeholder="پیشنهاد خود را اینجا بنویسید..."
-                    className="custom-scrollbar w-full bg-transparent border-0 px-6 py-4 text-slate-100 placeholder-slate-500 resize-none focus:outline-none text-lg"
-                    rows="4"
-                  />
+                  <div className="space-y-3 p-4">
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="عنوان پیشنهاد..."
+                      className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                    />
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && e.ctrlKey) handleSearch();
+                      }}
+                      placeholder="شرح پیشنهاد..."
+                      className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 resize-none focus:outline-none focus:border-indigo-500/50 transition-colors"
+                      rows="4"
+                    />
+                  </div>
                 ) : (
                   <input
                     type="text"
-                    value={suggestionId}
-                    onChange={(e) => setSuggestionId(e.target.value)}
+                    value={suggestionCode}
+                    onChange={(e) => setSuggestionCode(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSearch();
                     }}
-                    placeholder="شناسه پیشنهاد را وارد کنید (مثال: 12345)"
+                    placeholder="کد پیشنهاد را وارد کنید (مثال: CSS-1398-R&D-025603)"
                     className="w-full bg-transparent border-0 px-6 py-4 text-slate-100 placeholder-slate-500 focus:outline-none text-lg"
                   />
                 )}
@@ -283,7 +298,7 @@ const SimilarityChecker = () => {
                   
                   <button
                     onClick={handleSearch}
-                    disabled={isSearching || (searchMode === 'text' ? !query.trim() : !suggestionId.trim())}
+                    disabled={isSearching}
                     className="px-6 py-2.5 bg-gradient-to-l from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-xl font-medium flex items-center gap-2 transition-all duration-300 shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40"
                   >
                     {isSearching ? (
@@ -304,6 +319,19 @@ const SimilarityChecker = () => {
           </div>
         </div>
 
+        {/* Error Display */}
+        {error && (
+          <div className="max-w-4xl mx-auto mb-12">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 mt-0.5" />
+              <div>
+                <h3 className="text-red-400 font-semibold mb-1">خطا</h3>
+                <p className="text-red-300/80">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Loading State */}
         {isSearching && (
           <div className="max-w-4xl mx-auto mb-12">
@@ -321,84 +349,114 @@ const SimilarityChecker = () => {
 
         {/* Settings Panel */}
         {showSettings && (
-          <div className="mb-12 max-w-6xl mx-auto animate-fadeIn">
+          <div className="mb-12 max-w-6xl mx-auto">
             <div className="bg-slate-900/30 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
               <div className="flex items-center gap-2 mb-6">
                 <Filter className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-lg font-semibold text-slate-200">تنظیمات سیستم</h3>
+                <h3 className="text-lg font-semibold text-slate-200">تنظیمات جستجو</h3>
               </div>
               
-              {/* Search Settings */}
-              <div className="mb-6 pb-6 border-b border-white/10">
-                <h4 className="text-sm font-semibold text-slate-300 mb-4">تنظیمات جستجو</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="space-y-3">
-                    <label className="text-sm text-slate-400">تعداد نتایج</label>
-                    <div className="flex items-center gap-3" dir="ltr">
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={settings.maxResults}
-                        onChange={(e) => setSettings({...settings, maxResults: parseInt(e.target.value)})}
-                        className="flex-1 h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                      />
-                      <span className="text-indigo-400 font-semibold w-8 text-center">{toPersianNum(settings.maxResults)}</span>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400">کد کمیته</label>
+                  <input
+                    type="text"
+                    value={settings.committeeCode}
+                    onChange={(e) => setSettings({...settings, committeeCode: e.target.value})}
+                    placeholder="مثال: COM001"
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
 
-                  <div className="space-y-3">
-                    <label className="text-sm text-slate-400">حداقل میزان تشابه</label>
-                    <div className="flex items-center gap-3" dir="ltr">
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="1"
-                        step="0.05"
-                        value={settings.threshold}
-                        onChange={(e) => setSettings({...settings, threshold: parseFloat(e.target.value)})}
-                        className="flex-1 h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                      />
-                      <span className="text-purple-400 font-semibold w-12 text-center">{toPersianNum(Math.round(settings.threshold * 100))}%</span>
-                    </div>
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400">وضعیت</label>
+                  <input
+                    type="text"
+                    value={settings.status}
+                    onChange={(e) => setSettings({...settings, status: e.target.value})}
+                    placeholder="مثال: approved"
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
 
-                  <div className="space-y-3">
-                    <label className="text-sm text-slate-400">وزن جستجوی معنایی</label>
-                    <div className="flex items-center gap-3" dir="ltr">
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.1"
-                        value={settings.semanticWeight}
-                        onChange={(e) => setSettings({...settings, semanticWeight: parseFloat(e.target.value)})}
-                        className="flex-1 h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                      />
-                      <span className="text-blue-400 font-semibold w-12 text-center">{toPersianNum(Math.round(settings.semanticWeight * 100))}%</span>
-                    </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400">تکراری</label>
+                  <select
+                    value={settings.isDuplicated === null ? '' : settings.isDuplicated}
+                    onChange={(e) => setSettings({...settings, isDuplicated: e.target.value === '' ? null : e.target.value === 'true'})}
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  >
+                    <option value="">همه</option>
+                    <option value="true">بله</option>
+                    <option value="false">خیر</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400">تاریخ شروع</label>
+                  <input
+                    type="date"
+                    value={settings.startDate}
+                    onChange={(e) => setSettings({...settings, startDate: e.target.value})}
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400">تاریخ پایان</label>
+                  <input
+                    type="date"
+                    value={settings.endDate}
+                    onChange={(e) => setSettings({...settings, endDate: e.target.value})}
+                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-sm text-slate-400">حداقل تشابه</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={settings.threshold}
+                      onChange={(e) => setSettings({...settings, threshold: parseFloat(e.target.value)})}
+                      className="flex-1 h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                    />
+                    <span className="text-purple-400 font-semibold w-12 text-center">{toPersianNum(Math.round(settings.threshold * 100))}%</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Field Visibility Settings */}
-              <div>
-                <h4 className="text-sm font-semibold text-slate-300 mb-4">نمایش فیلدها در نتایج</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {Object.entries(fieldLabels).map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => toggleFieldVisibility(key)}
-                      className={`px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-all duration-300 ${
-                        visibleFields[key]
-                          ? 'bg-indigo-500/20 border border-indigo-500/30 text-indigo-300'
-                          : 'bg-slate-800/50 border border-slate-700/50 text-slate-500'
-                      }`}
-                    >
-                      {visibleFields[key] ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                      <span className="truncate">{label}</span>
-                    </button>
-                  ))}
+                <div className="space-y-3">
+                  <label className="text-sm text-slate-400">تعداد نتایج</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="1"
+                      max="100"
+                      value={settings.topK}
+                      onChange={(e) => setSettings({...settings, topK: parseInt(e.target.value)})}
+                      className="flex-1 h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    />
+                    <span className="text-indigo-400 font-semibold w-12 text-center">{toPersianNum(settings.topK)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-sm text-slate-400">وزن جستجوی معنایی (Alpha)</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={settings.alpha}
+                      onChange={(e) => setSettings({...settings, alpha: parseFloat(e.target.value)})}
+                      className="flex-1 h-2 bg-slate-700/50 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                    />
+                    <span className="text-blue-400 font-semibold w-12 text-center">{toPersianNum(Math.round(settings.alpha * 100))}%</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -406,25 +464,42 @@ const SimilarityChecker = () => {
         )}
 
         {/* Results Section */}
-        {!isSearching && results.length > 0 && (
-          <div className="max-w-6xl mx-auto animate-fadeIn">
-            <div className="flex items-center gap-2 mb-6">
-              <TrendingUp className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-xl font-semibold text-slate-200">
-                پیشنهادات مشابه یافت شده ({toPersianNum(results.length)})
-              </h3>
+        {!isSearching && results && results.results && results.results.length > 0 && (
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-xl font-semibold text-slate-200">
+                  پیشنهادات مشابه ({toPersianNum(results.results.length)})
+                </h3>
+              </div>
+              
+              {/* Statistics */}
+              <div className="flex gap-4 text-sm">
+                <div className="text-slate-400">
+                  کمینه: <span className="text-indigo-400 font-semibold">{toPersianNum(Math.round(results['more-info'].min))}%</span>
+                </div>
+                <div className="text-slate-400">
+                  میانه: <span className="text-blue-400 font-semibold">{toPersianNum(Math.round(results['more-info'].mid))}%</span>
+                </div>
+                <div className="text-slate-400">
+                  میانگین: <span className="text-purple-400 font-semibold">{toPersianNum(Math.round(results['more-info'].med))}%</span>
+                </div>
+                <div className="text-slate-400">
+                  بیشینه: <span className="text-emerald-400 font-semibold">{toPersianNum(Math.round(results['more-info'].max))}%</span>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
-              {results.map((result, index) => (
+              {results.results.map((result) => (
                 <div
                   key={result.id}
-                  className="group relative animate-slideUp"
-                  style={{animationDelay: `${index * 100}ms`}}
+                  className="group relative"
                 >
-                  <div className={`absolute -inset-0.5 bg-gradient-to-l ${getSimilarityColor(result.similarity).split(' ')[0]} ${getSimilarityColor(result.similarity).split(' ')[1]} rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
+                  <div className={`absolute -inset-0.5 bg-gradient-to-l ${getSimilarityColor(result.similarity_percent).split(' ')[0]} ${getSimilarityColor(result.similarity_percent).split(' ')[1]} rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
                   
-                  <div className={`relative bg-slate-900/40 backdrop-blur-xl border ${getSimilarityColor(result.similarity).split(' ')[2]} rounded-2xl p-6 hover:bg-slate-900/60 transition-all duration-300`}>
+                  <div className={`relative bg-slate-900/40 backdrop-blur-xl border ${getSimilarityColor(result.similarity_percent).split(' ')[2]} rounded-2xl p-6 hover:bg-slate-900/60 transition-all duration-300`}>
                     {/* Similarity Score Header */}
                     <div className="flex items-start justify-between gap-6 mb-4">
                       <div className="flex-1">
@@ -436,17 +511,13 @@ const SimilarityChecker = () => {
                           <span className="text-sm font-medium">جزئیات کامل</span>
                         </button>
                         
-                        {visibleFields.title && result.title && (
-                          <h4 className="text-lg font-semibold text-slate-100 mb-2">{result.title}</h4>
-                        )}
-                        {visibleFields.description && result.description && (
-                          <p className="text-slate-300 leading-relaxed">{result.description}</p>
-                        )}
+                        <h4 className="text-lg font-semibold text-slate-100 mb-2">{result.title}</h4>
+                        <p className="text-slate-300 leading-relaxed">{result.description}</p>
                       </div>
                       
                       <div className="flex flex-col items-center gap-2 min-w-[80px]">
-                        <div className={`text-3xl font-bold ${getSimilarityTextColor(result.similarity)}`}>
-                          {toPersianNum(Math.round(result.similarity * 100))}%
+                        <div className={`text-3xl font-bold ${getSimilarityTextColor(result.similarity_percent)}`}>
+                          {toPersianNum(result.similarity_percent)}%
                         </div>
                         <div className="text-xs text-slate-500">تشابه</div>
                       </div>
@@ -454,16 +525,35 @@ const SimilarityChecker = () => {
 
                     {/* Expanded Details */}
                     {expandedResults[result.id] && (
-                      <div className="mb-4 pt-4 border-t border-white/10 grid grid-cols-2 md:grid-cols-3 gap-3 animate-fadeIn">
-                        {Object.entries(fieldLabels).map(([key, label]) => {
-                          if (!visibleFields[key] || !result[key] || key === 'title' || key === 'description') return null;
-                          return (
-                            <div key={key} className="bg-slate-800/30 rounded-lg px-3 py-2">
-                              <div className="text-xs text-slate-500 mb-1">{label}</div>
-                              <div className="text-sm text-slate-200">{result[key]}</div>
-                            </div>
-                          );
-                        })}
+                      <div className="mb-4 pt-4 border-t border-white/10 grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div className="bg-slate-800/30 rounded-lg px-3 py-2">
+                          <div className="text-xs text-slate-500 mb-1">کد پیشنهاد</div>
+                          <div className="text-sm text-slate-200">{result.code}</div>
+                        </div>
+                        {result.status && (
+                          <div className="bg-slate-800/30 rounded-lg px-3 py-2">
+                            <div className="text-xs text-slate-500 mb-1">وضعیت</div>
+                            <div className="text-sm text-slate-200">{result.status}</div>
+                          </div>
+                        )}
+                        {result.committee_name && (
+                          <div className="bg-slate-800/30 rounded-lg px-3 py-2">
+                            <div className="text-xs text-slate-500 mb-1">کمیته</div>
+                            <div className="text-sm text-slate-200">{result.committee_name}</div>
+                          </div>
+                        )}
+                        {result.seed && (
+                          <div className="bg-slate-800/30 rounded-lg px-3 py-2">
+                            <div className="text-xs text-slate-500 mb-1">منبع</div>
+                            <div className="text-sm text-slate-200">{result.seed}</div>
+                          </div>
+                        )}
+                        {result.rejection_reason && (
+                          <div className="bg-slate-800/30 rounded-lg px-3 py-2 col-span-2">
+                            <div className="text-xs text-slate-500 mb-1">دلیل رد</div>
+                            <div className="text-sm text-slate-200">{result.rejection_reason}</div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -473,48 +563,49 @@ const SimilarityChecker = () => {
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-slate-400">آیا این نتیجه مفید بود؟</span>
                         <button
-                          onClick={() => handleFeedback(result.id, 'positive')}
-                          className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 transition-all duration-300"
+                          onClick={() => handleFeedback(results['operation-id'], result.index, 'positive')}
+                          disabled={feedbackGiven[`${results['operation-id']}-${result.index}`] === 'positive'}
+                          className={`p-2 rounded-lg border transition-all duration-300 ${
+                            feedbackGiven[`${results['operation-id']}-${result.index}`] === 'positive'
+                              ? 'bg-emerald-500/30 border-emerald-500/50 text-emerald-300'
+                              : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400'
+                          }`}
                         >
                           <ThumbsUp className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleFeedback(result.id, 'negative')}
-                          className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-500/50 text-rose-400 transition-all duration-300"
+                          onClick={() => handleFeedback(results['operation-id'], result.index, 'negative')}
+                          disabled={feedbackGiven[`${results['operation-id']}-${result.index}`] === 'negative'}
+                          className={`p-2 rounded-lg border transition-all duration-300 ${
+                            feedbackGiven[`${results['operation-id']}-${result.index}`] === 'negative'
+                              ? 'bg-rose-500/30 border-rose-500/50 text-rose-300'
+                              : 'bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 hover:border-rose-500/50 text-rose-400'
+                          }`}
                         >
                           <ThumbsDown className="w-4 h-4" />
                         </button>
                       </div>
 
                       {/* Comment Section */}
-                      {comments[result.id] ? (
-                        <div className="bg-slate-800/30 rounded-lg p-3 border border-slate-700/50">
-                          <div className="flex items-start gap-2">
-                            <MessageSquare className="w-4 h-4 text-indigo-400 mt-0.5" />
-                            <p className="text-sm text-slate-300 flex-1">{comments[result.id]}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={commentInputs[result.id] || ''}
-                            onChange={(e) => setCommentInputs({...commentInputs, [result.id]: e.target.value})}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleCommentSubmit(result.id);
-                            }}
-                            placeholder="نظر یا توضیحات خود را بنویسید..."
-                            className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
-                          />
-                          <button
-                            onClick={() => handleCommentSubmit(result.id)}
-                            disabled={!commentInputs[result.id]?.trim()}
-                            className="px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 disabled:bg-slate-700/30 border border-indigo-500/30 disabled:border-slate-600/30 rounded-lg text-indigo-400 disabled:text-slate-600 transition-all duration-300 disabled:cursor-not-allowed"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={commentInputs[`${results['operation-id']}-${result.index}`] || ''}
+                          onChange={(e) => setCommentInputs({...commentInputs, [`${results['operation-id']}-${result.index}`]: e.target.value})}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCommentSubmit(results['operation-id'], result.index);
+                          }}
+                          placeholder="نظر یا توضیحات خود را بنویسید..."
+                          className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+                        />
+                        <button
+                          onClick={() => handleCommentSubmit(results['operation-id'], result.index)}
+                          disabled={!commentInputs[`${results['operation-id']}-${result.index}`]?.trim()}
+                          className="px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 disabled:bg-slate-700/30 border border-indigo-500/30 disabled:border-slate-600/30 rounded-lg text-indigo-400 disabled:text-slate-600 transition-all duration-300 disabled:cursor-not-allowed"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -524,8 +615,8 @@ const SimilarityChecker = () => {
         )}
 
         {/* Empty State */}
-        {!isSearching && results.length === 0 && (query || suggestionId) && (
-          <div className="max-w-4xl mx-auto text-center py-16 animate-fadeIn">
+        {!isSearching && results && results.results && results.results.length === 0 && (
+          <div className="max-w-4xl mx-auto text-center py-16">
             <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800/50 border border-slate-700/50 flex items-center justify-center">
               <Search className="w-10 h-10 text-slate-600" />
             </div>
@@ -534,79 +625,6 @@ const SimilarityChecker = () => {
           </div>
         )}
       </main>
-
-      <style jsx>{`
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap');
-        
-        .font-vazir {
-          font-family: 'Vazirmatn', sans-serif;
-        }
-
-        /* Custom Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(71, 85, 105, 0.2);
-          border-radius: 10px;
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
-          border-radius: 10px;
-          border: 2px solid rgba(15, 23, 42, 0.5);
-        }
-
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(180deg, rgba(99, 102, 241, 0.7), rgba(139, 92, 246, 0.7));
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.5s ease-out;
-        }
-
-        .animate-slideUp {
-          animation: slideUp 0.5s ease-out backwards;
-        }
-
-        /* LTR Sliders */
-        input[type="range"]::-webkit-slider-thumb {
-          appearance: none;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: currentColor;
-          cursor: pointer;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: currentColor;
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
-        }
-      `}</style>
     </div>
   );
 };
