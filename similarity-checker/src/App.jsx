@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Settings, Loader2, TrendingUp, Sparkles, Filter, Hash, ThumbsUp, ThumbsDown, MessageSquare, Send, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, Settings, Loader2, TrendingUp, Sparkles, Filter, Hash, ThumbsUp, ThumbsDown, MessageSquare, Send, ChevronDown, ChevronUp, AlertCircle, Calendar, X, Check } from 'lucide-react';
 
 const SimilarityChecker = () => {
   const [searchMode, setSearchMode] = useState('text'); // 'text' or 'id'
@@ -13,9 +13,10 @@ const SimilarityChecker = () => {
   const [expandedResults, setExpandedResults] = useState({});
   const [commentInputs, setCommentInputs] = useState({});
   const [feedbackGiven, setFeedbackGiven] = useState({});
+  const [showDatePicker, setShowDatePicker] = useState({ start: false, end: false });
   
   // API Configuration - UPDATE THESE URLs
-  const API_BASE_URL = 'https://8000-01k6w02czv93bhave2xgrvw6gv.cloudspaces.litng.ai';
+  const API_BASE_URL = 'http://localhost:8000'; // Change to your API URL
   
   const [settings, setSettings] = useState({
     committeeCode: '',
@@ -28,10 +29,194 @@ const SimilarityChecker = () => {
     alpha: 0.5
   });
 
+  // Custom Dropdown Component
+  const CustomDropdown = ({ value, onChange, options, placeholder, icon: Icon }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOption = options.find(opt => opt.value === value);
+
+    return (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full bg-slate-800/50 border border-white/10 hover:border-indigo-500/50 rounded-xl px-4 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all duration-300 flex items-center justify-between group"
+        >
+          <span className={selectedOption ? 'text-slate-200' : 'text-slate-500'}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+          <div className="flex items-center gap-2">
+            {Icon && <Icon className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-colors" />}
+            <ChevronDown className={`w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-all duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+          </div>
+        </button>
+
+        {isOpen && (
+          <div className="absolute z-50 mt-2 w-full bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-xl shadow-2xl shadow-indigo-500/20 overflow-hidden animate-fadeIn">
+            <div className="max-h-60 overflow-y-auto custom-scrollbar">
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-right transition-all duration-200 flex items-center justify-between group ${
+                    value === option.value
+                      ? 'bg-gradient-to-l from-indigo-500/20 to-purple-500/20 text-indigo-300'
+                      : 'text-slate-300 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span>{option.label}</span>
+                  {value === option.value && (
+                    <Check className="w-4 h-4 text-indigo-400" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Convert to Persian numbers
   const toPersianNum = (num) => {
     const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
     return String(num).replace(/\d/g, (digit) => persianDigits[parseInt(digit)]);
+  };
+
+  // Persian/Jalali date utilities
+  const persianMonths = [
+    'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
+    'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند'
+  ];
+
+  const jalaliToGregorian = (jy, jm, jd) => {
+    const gy = jy <= 1342 ? 621 : 1600;
+    jy = jy - gy;
+    const days = (365 * jy) + (~~(jy / 33) * 8) + ~~((jy % 33 + 3) / 4) + 78 + jd + ((jm < 7) ? (jm - 1) * 31 : ((jm - 7) * 30) + 186);
+    let gy2 = 400 * ~~(days / 146097);
+    let gd = days % 146097;
+    if (gd >= 36525) {
+      gd--;
+      gy2 += 100 * ~~(gd / 36524);
+      gd = gd % 36524;
+      if (gd >= 365) gd++;
+    }
+    gy2 += 4 * ~~(gd / 1461);
+    gd %= 1461;
+    if (gd >= 366) {
+      gd--;
+      gy2 += ~~(gd / 365);
+      gd = gd % 365;
+    }
+    const gm = ~~((gd + 0.5) / 30.6) + 1;
+    gd = ~~(gd - (gm - 1) * 30.6 + 1);
+    return { year: gy + gy2, month: gm, day: gd };
+  };
+
+  const formatPersianDate = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${toPersianNum(parts[0])}/${toPersianNum(parts[1])}/${toPersianNum(parts[2])}`;
+  };
+
+  const PersianDatePicker = ({ value, onChange, placeholder, type }) => {
+    const [selectedYear, setSelectedYear] = useState(1403);
+    const [selectedMonth, setSelectedMonth] = useState(1);
+    const [selectedDay, setSelectedDay] = useState(1);
+
+    const handleDateSelect = () => {
+      const gregorian = jalaliToGregorian(selectedYear, selectedMonth, selectedDay);
+      const gregorianDate = `${gregorian.year}-${String(gregorian.month).padStart(2, '0')}-${String(gregorian.day).padStart(2, '0')}`;
+      onChange(gregorianDate);
+      setShowDatePicker({ ...showDatePicker, [type]: false });
+    };
+
+    const years = Array.from({ length: 20 }, (_, i) => 1403 - i).map(year => ({
+      value: year,
+      label: toPersianNum(year)
+    }));
+
+    const months = persianMonths.map((month, idx) => ({
+      value: idx + 1,
+      label: month
+    }));
+
+    const days = selectedMonth <= 6 ? 31 : selectedMonth <= 11 ? 30 : 29;
+    const dayOptions = Array.from({ length: days }, (_, i) => ({
+      value: i + 1,
+      label: toPersianNum(i + 1)
+    }));
+
+    return (
+      <div className="absolute z-50 mt-2 bg-slate-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-2xl p-6 shadow-2xl shadow-indigo-500/20 w-80">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-slate-200 font-semibold flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-indigo-400" />
+            انتخاب تاریخ شمسی
+          </h4>
+          <button
+            onClick={() => setShowDatePicker({ ...showDatePicker, [type]: false })}
+            className="p-1 hover:bg-slate-800/50 rounded-lg transition-colors"
+          >
+            <X className="w-4 h-4 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div>
+            <label className="text-xs text-slate-500 mb-2 block">سال</label>
+            <CustomDropdown
+              value={selectedYear}
+              onChange={setSelectedYear}
+              options={years}
+              placeholder="سال"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-500 mb-2 block">ماه</label>
+            <CustomDropdown
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              options={months}
+              placeholder="ماه"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-500 mb-2 block">روز</label>
+            <CustomDropdown
+              value={selectedDay}
+              onChange={setSelectedDay}
+              options={dayOptions}
+              placeholder="روز"
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={handleDateSelect}
+          className="w-full px-4 py-2.5 bg-gradient-to-l from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-indigo-500/25"
+        >
+          انتخاب تاریخ
+        </button>
+      </div>
+    );
   };
 
   // Search function
@@ -381,35 +566,60 @@ const SimilarityChecker = () => {
 
                 <div className="space-y-2">
                   <label className="text-sm text-slate-400">تکراری</label>
-                  <select
-                    value={settings.isDuplicated === null ? '' : settings.isDuplicated}
-                    onChange={(e) => setSettings({...settings, isDuplicated: e.target.value === '' ? null : e.target.value === 'true'})}
-                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                  >
-                    <option value="">همه</option>
-                    <option value="true">بله</option>
-                    <option value="false">خیر</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm text-slate-400">تاریخ شروع</label>
-                  <input
-                    type="date"
-                    value={settings.startDate}
-                    onChange={(e) => setSettings({...settings, startDate: e.target.value})}
-                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                  <CustomDropdown
+                    value={settings.isDuplicated}
+                    onChange={(val) => setSettings({...settings, isDuplicated: val})}
+                    options={[
+                      { value: null, label: 'همه' },
+                      { value: true, label: 'بله' },
+                      { value: false, label: 'خیر' }
+                    ]}
+                    placeholder="انتخاب وضعیت"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm text-slate-400">تاریخ پایان</label>
-                  <input
-                    type="date"
-                    value={settings.endDate}
-                    onChange={(e) => setSettings({...settings, endDate: e.target.value})}
-                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50"
-                  />
+                <div className="space-y-2 relative">
+                  <label className="text-sm text-slate-400">تاریخ شروع (شمسی)</label>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDatePicker({ ...showDatePicker, start: !showDatePicker.start, end: false })}
+                      className="w-full bg-slate-800/50 border border-white/10 hover:border-indigo-500/50 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-colors flex items-center justify-between group"
+                    >
+                      <span className={settings.startDate ? 'text-slate-200' : 'text-slate-500'}>
+                        {settings.startDate ? formatPersianDate(settings.startDate) : 'انتخاب تاریخ'}
+                      </span>
+                      <Calendar className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                    </button>
+                    {showDatePicker.start && (
+                      <PersianDatePicker
+                        value={settings.startDate}
+                        onChange={(date) => setSettings({...settings, startDate: date})}
+                        type="start"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 relative">
+                  <label className="text-sm text-slate-400">تاریخ پایان (شمسی)</label>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDatePicker({ ...showDatePicker, end: !showDatePicker.end, start: false })}
+                      className="w-full bg-slate-800/50 border border-white/10 hover:border-indigo-500/50 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-colors flex items-center justify-between group"
+                    >
+                      <span className={settings.endDate ? 'text-slate-200' : 'text-slate-500'}>
+                        {settings.endDate ? formatPersianDate(settings.endDate) : 'انتخاب تاریخ'}
+                      </span>
+                      <Calendar className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                    </button>
+                    {showDatePicker.end && (
+                      <PersianDatePicker
+                        value={settings.endDate}
+                        onChange={(date) => setSettings({...settings, endDate: date})}
+                        type="end"
+                      />
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -625,6 +835,234 @@ const SimilarityChecker = () => {
           </div>
         )}
       </main>
+
+      <style jsx>{`
+        /* Custom Scrollbar - Modern Dark Theme */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(99, 102, 241, 0.5) rgba(15, 23, 42, 0.3);
+        }
+
+        *::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+
+        *::-webkit-scrollbar-track {
+          background: linear-gradient(180deg, rgba(15, 23, 42, 0.5), rgba(30, 41, 59, 0.5));
+          border-radius: 10px;
+          margin: 4px;
+        }
+
+        *::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, rgba(99, 102, 241, 0.6), rgba(139, 92, 246, 0.6));
+          border-radius: 10px;
+          border: 2px solid rgba(15, 23, 42, 0.3);
+          transition: all 0.3s ease;
+        }
+
+        *::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
+          border-color: rgba(99, 102, 241, 0.3);
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+        }
+
+        *::-webkit-scrollbar-thumb:active {
+          background: linear-gradient(180deg, rgba(99, 102, 241, 1), rgba(139, 92, 246, 1));
+        }
+
+        *::-webkit-scrollbar-corner {
+          background: transparent;
+        }
+
+        /* Custom Scrollbar for Dropdowns */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(30, 41, 59, 0.3);
+          border-radius: 6px;
+          margin: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, rgba(99, 102, 241, 0.6), rgba(139, 92, 246, 0.6));
+          border-radius: 6px;
+          border: 1px solid rgba(15, 23, 42, 0.2);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(180deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.8));
+        }
+
+        /* Textarea custom scrollbar */
+        textarea::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        textarea::-webkit-scrollbar-track {
+          background: rgba(30, 41, 59, 0.3);
+          border-radius: 8px;
+        }
+
+        textarea::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
+          border-radius: 8px;
+          border: 2px solid rgba(15, 23, 42, 0.2);
+        }
+
+        @keyframes fadeIn {
+          from { 
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        .animate-slideUp {
+          animation: slideUp 0.5s ease-out backwards;
+        }
+
+        /* Range Slider Custom Styling */
+        input[type="range"] {
+          -webkit-appearance: none;
+          appearance: none;
+          background: transparent;
+          cursor: pointer;
+          width: 100%;
+        }
+
+        /* Track styling - Visible line */
+        input[type="range"]::-webkit-slider-track {
+          background: linear-gradient(
+            90deg, 
+            rgba(99, 102, 241, 0.5) 0%, 
+            rgba(139, 92, 246, 0.5) 50%,
+            rgba(99, 102, 241, 0.5) 100%
+          );
+          border: 2px solid rgba(99, 102, 241, 0.6);
+          border-radius: 12px;
+          height: 10px;
+          box-shadow: 
+            inset 0 2px 4px rgba(0, 0, 0, 0.4),
+            0 0 15px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Thumb styling - Circle that moves on the line */
+        input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          cursor: grab;
+          box-shadow: 
+            0 0 0 4px rgba(15, 23, 42, 0.9),
+            0 0 20px rgba(99, 102, 241, 0.8),
+            0 4px 12px rgba(0, 0, 0, 0.5),
+            inset 0 1px 2px rgba(255, 255, 255, 0.4);
+          transition: all 0.2s ease;
+          margin-top: -7px;
+          position: relative;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+          transform: scale(1.25);
+          cursor: grabbing;
+          box-shadow: 
+            0 0 0 4px rgba(15, 23, 42, 0.9),
+            0 0 30px rgba(99, 102, 241, 1),
+            0 6px 18px rgba(0, 0, 0, 0.6),
+            inset 0 1px 2px rgba(255, 255, 255, 0.5);
+        }
+
+        input[type="range"]::-webkit-slider-thumb:active {
+          transform: scale(1.15);
+          cursor: grabbing;
+          box-shadow: 
+            0 0 0 4px rgba(15, 23, 42, 1),
+            0 0 35px rgba(139, 92, 246, 1),
+            0 4px 15px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Firefox track styling */
+        input[type="range"]::-moz-range-track {
+          background: linear-gradient(
+            90deg, 
+            rgba(99, 102, 241, 0.5) 0%, 
+            rgba(139, 92, 246, 0.5) 50%,
+            rgba(99, 102, 241, 0.5) 100%
+          );
+          border: 2px solid rgba(99, 102, 241, 0.6);
+          border-radius: 12px;
+          height: 10px;
+          box-shadow: 
+            inset 0 2px 4px rgba(0, 0, 0, 0.4),
+            0 0 15px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Firefox thumb styling */
+        input[type="range"]::-moz-range-thumb {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          cursor: grab;
+          box-shadow: 
+            0 0 0 4px rgba(15, 23, 42, 0.9),
+            0 0 20px rgba(99, 102, 241, 0.8),
+            0 4px 12px rgba(0, 0, 0, 0.5),
+            inset 0 1px 2px rgba(255, 255, 255, 0.4);
+          border: none;
+          transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-moz-range-thumb:hover {
+          transform: scale(1.25);
+          cursor: grabbing;
+          box-shadow: 
+            0 0 0 4px rgba(15, 23, 42, 0.9),
+            0 0 30px rgba(99, 102, 241, 1),
+            0 6px 18px rgba(0, 0, 0, 0.6),
+            inset 0 1px 2px rgba(255, 255, 255, 0.5);
+        }
+
+        input[type="range"]::-moz-range-thumb:active {
+          transform: scale(1.15);
+          cursor: grabbing;
+          box-shadow: 
+            0 0 0 4px rgba(15, 23, 42, 1),
+            0 0 35px rgba(139, 92, 246, 1),
+            0 4px 15px rgba(0, 0, 0, 0.7);
+        }
+
+        /* Firefox progress fill */
+        input[type="range"]::-moz-range-progress {
+          background: linear-gradient(90deg, rgba(99, 102, 241, 0.7), rgba(139, 92, 246, 0.7));
+          border-radius: 12px;
+          height: 10px;
+        }
+      `}</style>
     </div>
   );
 };
