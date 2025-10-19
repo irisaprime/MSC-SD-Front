@@ -16,7 +16,7 @@ const SimilarityChecker = () => {
   const [showDatePicker, setShowDatePicker] = useState({ start: false, end: false });
   
   // API Configuration - UPDATE THESE URLs
-  const API_BASE_URL = 'http://localhost:8000'; // Change to your API URL
+  const API_BASE_URL = 'https://8000-01k6w02czv93bhave2xgrvw6gv.cloudspaces.litng.ai'; // Change to your API URL
   
   const [settings, setSettings] = useState({
     committeeCode: '',
